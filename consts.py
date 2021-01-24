@@ -39,6 +39,10 @@ MYSQL_DATABASE = get_env('MYSQL_DATABASE')
 SLACK_BOT_TOKEN = get_env('SLACK_BOT_TOKEN')
 SLACK_MESSAGE_CHANNEL = get_env('SLACK_MESSAGE_CHANNEL')
 
+# 利確ラインです。
+# NOTE: Decimal にするので文字列で定義します。
+PROFIT_BOOKING_RATE = '0.025'
+
 if __name__ == '__main__':
     print(repr(MYSQL_HOST))
     print(repr(MYSQL_USER))
