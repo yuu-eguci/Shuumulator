@@ -106,6 +106,22 @@ class DbClient:
         cursor.close()
         return records
 
+    def fetch_stocks(self) -> list:
+        """stocks を取得します。
+
+        Returns:
+            list: stocks
+        """
+
+        select_sql = ' '.join([
+            'SELECT * FROM shuumulator.stock',
+        ])
+        cursor = self.connection.cursor(dictionary=True)
+        cursor.execute(select_sql)
+        records = cursor.fetchall()
+        cursor.close()
+        return records
+
 
 def get_placeholder(count: int) -> str:
     """count ぶんのプレースホルダ文字列を作ります。
