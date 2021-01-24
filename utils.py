@@ -1,6 +1,7 @@
 """
 Python やるときにいつもあって欲しい自分用モジュールです。
 これは使いまわしたいのでリポジトリのビジネスロジック入れないでね。
+NOTE: DbClient 内なら OK。
 以下、できること。
 
 # Dependencies
@@ -83,6 +84,27 @@ class DbClient:
         cursor.execute(update_sql, (1, 1))
         cursor.close()
         self.connection.commit()
+
+    def fetch_completed_tradings(self, user: int) -> list:
+        """完了済みの trading レコードを取得します。
+
+        Args:
+            user (int): trading.user
+
+        Returns:
+            list: tradings
+        """
+
+        select_sql = ' '.join([
+            'SELECT *',
+            'FROM trading',
+            'WHERE user=%s AND sold_at IS NOT NULL',
+        ])
+        cursor = self.connection.cursor(dictionary=True)
+        cursor.execute(select_sql, (user,))
+        records = cursor.fetchall()
+        cursor.close()
+        return records
 
 
 def get_placeholder(count: int) -> str:
