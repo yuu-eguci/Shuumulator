@@ -29,4 +29,9 @@ jobs:
       run: |
         pipenv run python main.py
       env:
-        FOO: ${{ secrets.FOO }}
+        MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+        MYSQL_USER: ${{ secrets.MYSQL_USER }}
+        MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+        MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        SLACK_MESSAGE_CHANNEL: ${{ secrets.SLACK_MESSAGE_CHANNEL }}
