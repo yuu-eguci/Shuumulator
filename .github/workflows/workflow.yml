@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - master
+  schedule:
+    # Ref: https://crontab.guru/
+    # At minute 15 past every hour from 0 through 6 on every day-of-week from Monday through Friday.
+    - cron: '15 0-6 * * 1-5'
 
 jobs:
   build:

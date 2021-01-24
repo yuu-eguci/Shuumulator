@@ -1,3 +1,7 @@
+# Built-in modules.
+import datetime
+import pytz
+
 # User modules.
 import utils
 import functions
@@ -5,7 +9,8 @@ import functions
 
 # ロガーを取得します。
 logger = utils.get_my_logger(__name__)
-logger.info('Shuumulator starts.')
+current_jst = datetime.datetime.now(tz=pytz.timezone('Asia/Tokyo'))
+logger.info(f'Shuumulator started at {current_jst.isoformat()}')
 
 # 利確ラインを定義します。
 profit_booking_rate = functions.get_profit_booking_rate()
@@ -34,3 +39,6 @@ for stock in target_stocks:
     # 売る、買う、何もしない、を選択します。
 
     pass
+
+current_jst = datetime.datetime.now(tz=pytz.timezone('Asia/Tokyo'))
+logger.info(f'Shuumulator finished at {current_jst.isoformat()}')
