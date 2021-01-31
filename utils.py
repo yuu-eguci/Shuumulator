@@ -20,11 +20,13 @@ utils.send_slack_message(message)
 
 # Built-in modules.
 import logging
+import datetime
 
 # Third-party modules.
 import mysql.connector
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+import pytz
 
 # User modules.
 import consts
@@ -121,6 +123,31 @@ class DbClient:
         records = cursor.fetchall()
         cursor.close()
         return records
+
+    def create_stock_log(self, stock_id, price) -> int:
+        """stock_log を INSERT します。
+
+        Args:
+            stock_id ([type]): stock.id
+            price ([type]): stock_log.price
+
+        Returns:
+            int: created id
+        """
+
+        update_sql = ' '.join([
+            'INSERT INTO stock_log (stock, price, created_at)',
+            'VALUES (%s, %s, %s)',
+        ])
+        cursor = self.connection.cursor(dictionary=True)
+        cursor.execute(
+            update_sql,
+            (stock_id, price, datetime.datetime.now(tz=pytz.utc))
+        )
+        last_row_id = cursor.lastrowid
+        cursor.close()
+        self.connection.commit()
+        return last_row_id
 
 
 def get_placeholder(count: int) -> str:

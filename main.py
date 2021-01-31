@@ -1,6 +1,7 @@
 # Built-in modules.
 import datetime
 import pytz
+import time
 
 # User modules.
 import utils
@@ -33,12 +34,23 @@ logger.info(f'対象銘柄は {len(target_stocks)} 件です。')
 for stock in target_stocks:
 
     # スクレイピングで現在の価格を取得します。
+    # NOTE: テスト中につき実際の値は取得せずテスト値で処理を進めています。
+    # current_stock_price = functions.get_current_stock_price(stock['code'])
+    import decimal
+    current_stock_price = decimal.Decimal('1377.0')
 
     # stock_log 保存。
+    with utils.DbClient() as db_client:
+        tradings = db_client.create_stock_log(
+            stock['id'],
+            current_stock_price
+        )
 
     # 売る、買う、何もしない、を選択します。
 
-    pass
+    # スクレイピング先に負荷をかけることを避けるため、待機します。
+    time.sleep(5)
+    break
 
 current_jst = datetime.datetime.now(tz=pytz.timezone('Asia/Tokyo'))
 logger.info(f'Shuumulator finished at {current_jst.isoformat()}')
