@@ -6,8 +6,15 @@ on:
       - master
   schedule:
     # Ref: https://crontab.guru/
-    # At minute 15 past every hour from 0 through 6 on every day-of-week from Monday through Friday.
-    - cron: '15 0-6 * * 1-5'
+    # NOTE: 複数 cron を書いてもよいのかどうか、検証中です。
+    #       ダメなら 30 22,23,00,01,02,03,04 * * 0-5 こう書きます。
+    - cron: '30 22 * * 0-4'
+    - cron: '30 23 * * 0-4'
+    - cron: '30 00 * * 1-5'
+    - cron: '30 01 * * 1-5'
+    - cron: '30 02 * * 1-5'
+    - cron: '30 03 * * 1-5'
+    - cron: '30 04 * * 1-5'
 
 jobs:
   build:
