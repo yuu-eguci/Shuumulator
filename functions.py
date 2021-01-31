@@ -3,6 +3,10 @@
 # Built-in modules.
 from decimal import Decimal
 
+# Third-party modules.
+import requests
+from bs4 import BeautifulSoup
+
 # User modules.
 import consts
 import utils
@@ -103,6 +107,31 @@ def get_loss_cut_rate(profit_booking_rate: Decimal,
                     f'利確ライン:{profit_booking_per}%, 勝率:{user_wins_per}%')
 
 
+def get_current_stock_price(stock_code: str) -> Decimal:
+    """株価を取得します。
+
+    Args:
+        stock_code (str): 銘柄コード
+
+    Returns:
+        Decimal: 現在の株価
+    """
+
+    # Web ページを取得します。
+    response = requests.get(f'https://minkabu.jp/stock/{stock_code}')
+    assert response.status_code == 200, (
+        f'株価のスクレイピングに失敗しました。アクセス先: https://minkabu.jp/stock/{stock_code}'
+    )
+
+    # 株価が格納されているのは #stock-for-securities-company の data-price attribute です。
+    # BeautifulSoup によって抽出します。
+    soup = BeautifulSoup(response.text, 'lxml')
+    data_price = soup.select_one('#stock-for-securities-company')['data-price']
+
+    # NOTE: リポジトリ全体で Decimal を使っています。ここも Decimal で返却します。
+    return Decimal(data_price)
+
+
 if __name__ == '__main__':
     # 損切ライン算出のテストです。
     # 利確ライン5% 勝率50% なら 損切ライン4.7% で「機械割」100% をこえます。
@@ -114,3 +143,10 @@ if __name__ == '__main__':
     # 利確ライン2.5% 勝率50% なら 損切ライン2.4% で「機械割」100% をこえます。
     print(
         Decimal('0.024') == get_loss_cut_rate(Decimal('0.025'), Decimal('0.5')))
+
+    # 株価スクレイピングのテストです。
+    print(
+        '株価スクレイピングテスト:'
+        ' stock_code->1357'
+        f' data_price->{get_current_stock_price("1357")}'
+    )
