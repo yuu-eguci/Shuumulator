@@ -8,6 +8,9 @@ python-dotenv = "*"
 mysql-connector-python = "*"
 slack-sdk = "*"
 pytz = "*"
+requests = "*"
+beautifulsoup4 = "*"
+lxml = "*"
 
 [dev-packages]
 
