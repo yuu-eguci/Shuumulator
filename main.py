@@ -10,6 +10,8 @@ import functions
 
 # ロガーを取得します。
 logger = utils.get_my_logger(__name__)
+current_utc = datetime.datetime.now(tz=pytz.utc)
+logger.info(f'Shuumulator started at {current_utc.isoformat()}')
 current_jst = datetime.datetime.now(tz=pytz.timezone('Asia/Tokyo'))
 logger.info(f'Shuumulator started at {current_jst.isoformat()}')
 
@@ -52,5 +54,7 @@ for stock in target_stocks:
     time.sleep(5)
     break
 
+current_utc = datetime.datetime.now(tz=pytz.utc)
+logger.info(f'Shuumulator finished at {current_utc.isoformat()}')
 current_jst = datetime.datetime.now(tz=pytz.timezone('Asia/Tokyo'))
 logger.info(f'Shuumulator finished at {current_jst.isoformat()}')
