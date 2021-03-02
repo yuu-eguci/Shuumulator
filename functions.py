@@ -132,6 +132,71 @@ def get_current_stock_price(stock_code: str) -> Decimal:
     return Decimal(data_price)
 
 
+def deal_in(stock_id: int,
+            current_stock_price: Decimal,
+            profit_booking_rate: Decimal,
+            loss_cut_rate: Decimal) -> dict:
+    """対象 stock の買付と売付を行います。
+    - もってない -> 買う
+    - 現在価格が利確ラインより上 -> 売る
+    - 現在価格が損切ラインより下 -> 売る
+    - それ以外 -> キープ
+    判断結果は {message} の形式で返却します。
+
+    Args:
+        stock_id (int): trading.stock
+        current_stock_price (Decimal): 現在価格
+        profit_booking_rate (Decimal): 利確レート。取得価格にこれをかけて利確ラインを算出します。
+        loss_cut_rate (Decimal): 損切レート。取得価格にこれをかけて損切ラインを算出します。
+
+    Returns:
+        dict: 行った処理を呼び出し元に伝えるメッセージを含む dict です。
+    """
+
+    # この stock の最新 trading 情報を取得します。
+    with utils.DbClient() as db_client:
+        newest_trading = db_client.fetch_newest_trading(
+            stock_id
+        )
+
+    # この stock は手持ちがあるかどうかを判断します。
+    # NOTE: そもそも trading が無い -> 当然、手持ち無し
+    # NOTE: sold_at が埋まっている -> 売却済み -> 手持ち無し
+    holds_this_stock = (not newest_trading['sold_at']
+                        if newest_trading
+                        else False)
+
+    # 手持ちがなければ、有無を言わさず買います。
+    if not holds_this_stock:
+        # NOTE: 買うということは trading に一件追加するということです。
+        with utils.DbClient() as db_client:
+            db_client.create_trading(
+                stock_id=stock_id,
+                user_id=1,
+                price=current_stock_price,
+            )
+        return dict(message=f'現在の価格:{current_stock_price}, 買付しました。')
+
+    # この stock の手持ちがある場合は、売るかどうかの判断に進みます。
+    # 売るのは、利確ラインを超えているとき、あるいは損切ラインを下回っているときです。
+    buy_price = newest_trading['buy']
+    profit_booking_price = (buy_price + buy_price * profit_booking_rate)
+    loss_cut_price = (buy_price - buy_price * loss_cut_rate)
+    message = (
+        f'利確:{profit_booking_price},'
+        f'損切:{loss_cut_price},'
+        f'現在の価格:{current_stock_price}')
+    if (current_stock_price >= profit_booking_price
+            or current_stock_price <= loss_cut_price):
+        # NOTE: 売るということは trading.sell を埋めるということです。
+        with utils.DbClient() as db_client:
+            db_client.update_trading(
+                trading_id=newest_trading['id'],
+                sell_price=current_stock_price,
+            )
+        return dict(message=f'{message}, 売付しました。')
+    return dict(message=f'{message}, 売付しません。')
+
 if __name__ == '__main__':
     # 損切ライン算出のテストです。
     # 利確ライン5% 勝率50% なら 損切ライン4.7% で「機械割」100% をこえます。
