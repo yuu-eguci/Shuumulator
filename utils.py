@@ -88,11 +88,15 @@ class DbClient:
         cursor.close()
         self.connection.commit()
 
-    def fetch_completed_tradings(self, user: int) -> list:
+    def fetch_completed_tradings(self,
+                                 user: int,
+                                 with_stock: bool = False) -> list:
         """完了済みの trading レコードを取得します。
 
         Args:
             user (int): trading.user
+            with_stock (bool, optional): Defaults to False.
+                                         LEFT JOIN stock が欲しい場合が出ていたので追加した optional 引数です。
 
         Returns:
             list: tradings
@@ -101,6 +105,7 @@ class DbClient:
         select_sql = ' '.join([
             'SELECT *',
             'FROM trading',
+            'LEFT JOIN stock ON trading.stock=stock.id' if with_stock else '',
             'WHERE user=%s AND sold_at IS NOT NULL',
         ])
         cursor = self.connection.cursor(dictionary=True)
@@ -108,6 +113,18 @@ class DbClient:
         records = cursor.fetchall()
         cursor.close()
         return records
+
+    def fetch_completed_tradings_with_stock(self, user: int) -> list:
+        """完了済みの trading レコードを LEFT JOIN stock で取得します。
+
+        Args:
+            user (int): trading.user
+
+        Returns:
+            list: tradings
+        """
+
+        return self.fetch_completed_tradings(user=user, with_stock=True)
 
     def fetch_newest_trading(self, stock_id: int) -> dict:
         """最新の trading レコードを取得します。

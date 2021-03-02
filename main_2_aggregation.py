@@ -27,9 +27,15 @@ import functions
 
 
 # 売買履歴(trading)をすべて取得します。
+with utils.DbClient() as db_client:
+    tradings = db_client.fetch_completed_tradings_with_stock(user=1)
 
 # 各 dict にロギング用の項目を足します。
 # NOTE: code,name,buy,bought_at,sell,sold_at,difference,difference_percentage
+for trading in tradings:
+
+    print(trading)
+
 
 # 集計項目を算出します。
 # Total trades
