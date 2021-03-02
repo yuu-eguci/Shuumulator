@@ -110,6 +110,15 @@ class DbClient:
         return records
 
     def fetch_newest_trading(self, stock_id: int) -> dict:
+        """最新の trading レコードを取得します。
+        存在しなければ None を返します。
+
+        Args:
+            stock_id (int): stock.id
+
+        Returns:
+            dict: trading
+        """
 
         select_sql = ' '.join([
             'SELECT *',
@@ -140,7 +149,7 @@ class DbClient:
         cursor.close()
         return records
 
-    def create_stock_log(self, stock_id, price) -> int:
+    def create_stock_log(self, stock_id: int, price: decimal.Decimal) -> int:
         """stock_log を INSERT します。
 
         Args:
@@ -167,6 +176,16 @@ class DbClient:
 
     def create_trading(self, stock_id: int, user_id: int,
                        price: decimal.Decimal) -> int:
+        """trading を一件追加します。
+
+        Args:
+            stock_id (int): trading.stock
+            user_id (int): trading.user
+            price (decimal.Decimal): trading.buy
+
+        Returns:
+            int: created trading.id
+        """
 
         current_utc = datetime.datetime.now(tz=pytz.utc)
 
@@ -188,6 +207,12 @@ class DbClient:
 
     def update_trading(self, trading_id: int,
                        sell_price: decimal.Decimal) -> None:
+        """trading.sell と trading.sold_at を更新します。
+
+        Args:
+            trading_id (int): trading.id
+            sell_price (decimal.Decimal): trading.sell
+        """
 
         update_sql = ' '.join([
             'UPDATE trading',
