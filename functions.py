@@ -39,7 +39,7 @@ def get_user_wins_rate(user_id: int) -> Decimal:
         return Decimal('0.5')
 
     # 勝ち数。
-    wins_count = len(filter(lambda t: t['sell'] > t['buy'], tradings))
+    wins_count = len(list(filter(lambda t: t['sell'] > t['buy'], tradings)))
 
     # 勝率。
     wins_rate = Decimal(str(wins_count)) / Decimal(str(tradings_count))

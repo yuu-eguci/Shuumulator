@@ -21,6 +21,7 @@ utils.send_slack_message(message)
 # Built-in modules.
 import logging
 import datetime
+import decimal
 
 # Third-party modules.
 import mysql.connector
@@ -108,6 +109,21 @@ class DbClient:
         cursor.close()
         return records
 
+    def fetch_newest_trading(self, stock_id: int) -> dict:
+
+        select_sql = ' '.join([
+            'SELECT *',
+            'FROM trading',
+            'WHERE stock=%s',
+            'ORDER BY created_at DESC',
+            'LIMIT 1',
+        ])
+        cursor = self.connection.cursor(dictionary=True)
+        cursor.execute(select_sql, (stock_id,))
+        record = cursor.fetchone()
+        cursor.close()
+        return record
+
     def fetch_stocks(self) -> list:
         """stocks を取得します。
 
@@ -135,19 +151,56 @@ class DbClient:
             int: created id
         """
 
-        update_sql = ' '.join([
+        insert_sql = ' '.join([
             'INSERT INTO stock_log (stock, price, created_at)',
             'VALUES (%s, %s, %s)',
         ])
         cursor = self.connection.cursor(dictionary=True)
         cursor.execute(
-            update_sql,
+            insert_sql,
             (stock_id, price, datetime.datetime.now(tz=pytz.utc))
         )
         last_row_id = cursor.lastrowid
         cursor.close()
         self.connection.commit()
         return last_row_id
+
+    def create_trading(self, stock_id: int, user_id: int,
+                       price: decimal.Decimal) -> int:
+
+        current_utc = datetime.datetime.now(tz=pytz.utc)
+
+        insert_sql = ' '.join([
+            'INSERT INTO trading',
+            '(stock, user, buy, bought_at, created_at)',
+            'VALUES',
+            '(%s, %s, %s, %s, %s)',
+        ])
+        cursor = self.connection.cursor(dictionary=True)
+        cursor.execute(
+            insert_sql,
+            (stock_id, user_id, price, current_utc, current_utc)
+        )
+        last_row_id = cursor.lastrowid
+        cursor.close()
+        self.connection.commit()
+        return last_row_id
+
+    def update_trading(self, trading_id: int,
+                       sell_price: decimal.Decimal) -> None:
+
+        update_sql = ' '.join([
+            'UPDATE trading',
+            'SET sell=%s, sold_at=%s',
+            'WHERE id=%s',
+        ])
+        cursor = self.connection.cursor(dictionary=True)
+        cursor.execute(
+            update_sql,
+            (sell_price, datetime.datetime.now(tz=pytz.utc), trading_id)
+        )
+        cursor.close()
+        self.connection.commit()
 
 
 def get_placeholder(count: int) -> str:
