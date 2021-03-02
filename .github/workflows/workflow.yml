@@ -1,9 +1,6 @@
 name: Shuumulator workflow
 
 on:
-  push:
-    branches:
-      - master
   schedule:
     # Ref: https://crontab.guru/
     # NOTE: 複数 cron を書いてもよいのかどうか、検証中です。
