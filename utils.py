@@ -21,7 +21,7 @@ utils.send_slack_message(message)
 # Built-in modules.
 import logging
 import datetime
-import decimal
+from decimal import Decimal
 
 # Third-party modules.
 import mysql.connector
@@ -149,7 +149,7 @@ class DbClient:
         cursor.close()
         return records
 
-    def create_stock_log(self, stock_id: int, price: decimal.Decimal) -> int:
+    def create_stock_log(self, stock_id: int, price: Decimal) -> int:
         """stock_log を INSERT します。
 
         Args:
@@ -175,13 +175,13 @@ class DbClient:
         return last_row_id
 
     def create_trading(self, stock_id: int, user_id: int,
-                       price: decimal.Decimal) -> int:
+                       price: Decimal) -> int:
         """trading を一件追加します。
 
         Args:
             stock_id (int): trading.stock
             user_id (int): trading.user
-            price (decimal.Decimal): trading.buy
+            price (Decimal): trading.buy
 
         Returns:
             int: created trading.id
@@ -206,12 +206,12 @@ class DbClient:
         return last_row_id
 
     def update_trading(self, trading_id: int,
-                       sell_price: decimal.Decimal) -> None:
+                       sell_price: Decimal) -> None:
         """trading.sell と trading.sold_at を更新します。
 
         Args:
             trading_id (int): trading.id
-            sell_price (decimal.Decimal): trading.sell
+            sell_price (Decimal): trading.sell
         """
 
         update_sql = ' '.join([
