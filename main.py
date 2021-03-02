@@ -1,3 +1,10 @@
+"""Shuumulator main module
+
+株価をスクレイピングで取得し、一定のルール(Shuumulator)で算出した利確ラインと損切ラインによって仮想売買を行うモジュールです。
+実行すると stock テーブルに登録されている銘柄について売買を行います。
+"""
+
+
 # Built-in modules.
 import datetime
 import pytz
