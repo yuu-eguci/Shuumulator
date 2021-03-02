@@ -1,0 +1,36 @@
+name: Shuumulator aggregation workflow
+
+on:
+  # NOTE: 手動実行のことです。
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v2
+
+    - name: Set up Python 3.8
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.8
+
+    - name: Install pipenv and dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pipenv --upgrade-strategy=only-if-needed
+        pipenv install --dev
+
+    - name: Run
+      run: |
+        pipenv run python main_2_aggregation.py
+      env:
+        MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+        MYSQL_USER: ${{ secrets.MYSQL_USER }}
+        MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+        MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
+        SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        SLACK_MESSAGE_CHANNEL: ${{ secrets.SLACK_MESSAGE_CHANNEL }}
