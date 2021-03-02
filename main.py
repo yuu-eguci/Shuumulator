@@ -37,14 +37,10 @@ for stock in target_stocks:
     # NOTE: stock は dict です。 { code, name }
 
     # スクレイピング先に負荷をかけることを避けるため、待機します。
-    # TODO: GitHub Actions で動かすときは有効化
-    # time.sleep(5)
+    time.sleep(5)
 
     # スクレイピングで現在の価格を取得します。
-    # NOTE: テスト中につき実際の値は取得せずテスト値で処理を進めています。
-    # current_stock_price = functions.get_current_stock_price(stock['code'])
-    import decimal
-    current_stock_price = decimal.Decimal('1100.0')
+    current_stock_price = functions.get_current_stock_price(stock['code'])
 
     # stock_log 保存。
     # NOTE: これが必要なのかは微妙ですね。せっかく取得した情報がもったいないと思い、記録しています。
@@ -62,9 +58,6 @@ for stock in target_stocks:
         loss_cut_rate=loss_cut_rate,
     )
     logger.info(f'{stock["id"]} {stock["name"]} {result_dic["message"]}')
-
-    # TODO: WIP につき break
-    break
 
 current_utc = datetime.datetime.now(tz=pytz.utc)
 logger.info(f'Shuumulator finished at {current_utc.isoformat()}')
