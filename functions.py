@@ -107,14 +107,15 @@ def get_loss_cut_rate(profit_booking_rate: Decimal,
                     f'利確ライン:{profit_booking_per}%, 勝率:{user_wins_per}%')
 
 
-def get_current_stock_price(stock_code: str) -> Decimal:
-    """株価を取得します。
+def get_current_stock_price(stock_code: str) -> dict:
+    """株価と短縮名を取得します。
+    NOTE: 短縮名はロギングのために取得しています。
 
     Args:
         stock_code (str): 銘柄コード
 
     Returns:
-        Decimal: 現在の株価
+        dict: {data_price=現在の株価, data_short_name=銘柄の短縮名}
     """
 
     # Web ページを取得します。
@@ -126,10 +127,15 @@ def get_current_stock_price(stock_code: str) -> Decimal:
     # 株価が格納されているのは #stock-for-securities-company の data-price attribute です。
     # BeautifulSoup によって抽出します。
     soup = BeautifulSoup(response.text, 'lxml')
-    data_price = soup.select_one('#stock-for-securities-company')['data-price']
+    data_price = soup.select_one(
+        '#stock-for-securities-company')['data-price']
+    data_short_name = soup.select_one(
+        '#stock-for-securities-company')['data-short-name']
 
     # NOTE: リポジトリ全体で Decimal を使っています。ここも Decimal で返却します。
-    return Decimal(data_price)
+    return dict(
+        data_price=Decimal(data_price),
+        data_short_name=data_short_name)
 
 
 def deal_in(stock_id: int,
@@ -196,6 +202,7 @@ def deal_in(stock_id: int,
             )
         return dict(message=f'{message}, 売付しました。')
     return dict(message=f'{message}, 売付しません。')
+
 
 if __name__ == '__main__':
     # 損切ライン算出のテストです。

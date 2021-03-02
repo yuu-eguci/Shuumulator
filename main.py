@@ -40,7 +40,9 @@ for stock in target_stocks:
     time.sleep(5)
 
     # スクレイピングで現在の価格を取得します。
-    current_stock_price = functions.get_current_stock_price(stock['code'])
+    _ = functions.get_current_stock_price(stock['code'])
+    current_stock_price = _['data_price']
+    stock_short_name = _['data_short_name']
 
     # stock_log 保存。
     # NOTE: これが必要なのかは微妙ですね。せっかく取得した情報がもったいないと思い、記録しています。
@@ -57,7 +59,11 @@ for stock in target_stocks:
         profit_booking_rate=profit_booking_rate,
         loss_cut_rate=loss_cut_rate,
     )
-    logger.info(f'{stock["id"]} {stock["name"]} {result_dic["message"]}')
+
+    # NOTE: 銘柄の名称には stock['name'] を使うこともできます。
+    #       ただ、スクレイピングで stock_price と一緒に取得した値のほうが正確だと考えこれを使っています。
+    #       stock.name が間違っている可能性を考慮しているということです。
+    logger.info(f'{stock["id"]} {stock_short_name} {result_dic["message"]}')
 
 current_utc = datetime.datetime.now(tz=pytz.utc)
 logger.info(f'Shuumulator finished at {current_utc.isoformat()}')
