@@ -38,6 +38,14 @@ Hours later...
 
 ![5](https://user-images.githubusercontent.com/28250432/109736677-104d0e00-7c08-11eb-9040-a1f539327da5.png)
 
+## How it works
+
+動作する様子です。
+
+![shuumulator-screen-shot1](https://user-images.githubusercontent.com/28250432/109889788-5f0eac80-7cc9-11eb-9c54-cb2c6ab54070.png)
+
+![shuumulator-screen-shot2](https://user-images.githubusercontent.com/28250432/109889791-5fa74300-7cc9-11eb-815e-f5855ad1dfbe.png)
+
 ## Installation
 
 Create .env file. But no one can use this program but I, because you need to know the database structure.
