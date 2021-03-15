@@ -2,6 +2,8 @@
 
 # Built-in modules.
 from decimal import Decimal
+import datetime
+import pytz
 
 # Third-party modules.
 import requests
@@ -10,6 +12,20 @@ from bs4 import BeautifulSoup
 # User modules.
 import consts
 import utils
+
+
+def market_is_open() -> bool:
+    """9〜15時であれば True を返します。
+
+    Returns:
+        bool: 9〜15時であれば True。
+    """
+
+    # 現在時刻。
+    current_jst = datetime.datetime.now(tz=pytz.timezone('Asia/Tokyo'))
+    # 現在の「時」。
+    current_hour = current_jst.hour
+    return 9 <= current_hour <= 15
 
 
 def get_profit_booking_rate() -> Decimal:
@@ -222,3 +238,6 @@ if __name__ == '__main__':
         ' stock_code->1357'
         f' data_price->{get_current_stock_price("1357")}'
     )
+
+    # market_is_open の動作確認です。
+    print('現在、市場は開いている:', market_is_open())
