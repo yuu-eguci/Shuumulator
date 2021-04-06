@@ -105,8 +105,8 @@ class DbClient:
         select_sql = ' '.join([
             'SELECT *',
             'FROM trading',
-            'LEFT JOIN stock ON trading.stock=stock.id' if with_stock else '',
-            'WHERE user=%s AND sold_at IS NOT NULL',
+            'LEFT JOIN stock ON trading.stock_id=stock.id' if with_stock else '',
+            'WHERE user_id=%s AND sold_at IS NOT NULL',
         ])
         cursor = self.connection.cursor(dictionary=True)
         cursor.execute(select_sql, (user,))
@@ -140,7 +140,7 @@ class DbClient:
         select_sql = ' '.join([
             'SELECT *',
             'FROM trading',
-            'WHERE stock=%s',
+            'WHERE stock_id=%s',
             'ORDER BY created_at DESC',
             'LIMIT 1',
         ])
@@ -178,7 +178,7 @@ class DbClient:
         """
 
         insert_sql = ' '.join([
-            'INSERT INTO stock_log (stock, price, created_at)',
+            'INSERT INTO stock_log (stock_id, price, created_at)',
             'VALUES (%s, %s, %s)',
         ])
         cursor = self.connection.cursor(dictionary=True)
@@ -208,7 +208,7 @@ class DbClient:
 
         insert_sql = ' '.join([
             'INSERT INTO trading',
-            '(stock, user, buy, bought_at, created_at)',
+            '(stock_id, user_id, buy, bought_at, created_at)',
             'VALUES',
             '(%s, %s, %s, %s, %s)',
         ])
