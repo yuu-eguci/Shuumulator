@@ -1,6 +1,14 @@
 Shuumulator
 ===
 
+📈 Shuumulator project contains a program which continuously simulates stock trading with solid logic, a web page of Vue.js and a web application of Django. To tell the outline of the logic, it comes that if you trade following specified profit rate and loss rate, your total profit will become zero. It doesn't expect money; it is the trading for play.
+
+- [yuu-eguci/Shuumulator](https://github.com/yuu-eguci/Shuumulator)
+- [yuu-eguci/ShuumulatorWeb](https://github.com/yuu-eguci/ShuumulatorWeb)
+- [yuu-eguci/ShuumulatorApi](https://github.com/yuu-eguci/ShuumulatorApi)
+
+![shuumulator](https://user-images.githubusercontent.com/28250432/122638209-ee7f8480-d12d-11eb-9ccc-e0f7c0ca9be1.png)
+
 ## Description
 
 ![readme](https://user-images.githubusercontent.com/28250432/109735015-518fee80-7c05-11eb-89a0-1c275fe81594.png)
