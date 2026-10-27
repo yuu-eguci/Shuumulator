@@ -4,259 +4,222 @@ Python やるときにいつもあって欲しい自分用モジュールです�
 NOTE: DbClient 内なら OK。
 以下、できること。
 
-# Dependencies
-pipenv install python-dotenv mysql-connector-python
-
 # MySQL への接続。
-with utils.DbClient() as db_client:
-    records = db_client.sample_select()
+# NOTE: 書き込んだら commit() してください。 with を例外で抜けるとロールバックします。
+with utils.DbClient(settings) as db_client:
+    stocks = db_client.fetch_stocks()
 
 # logger の取得。
 logger = utils.get_my_logger(__name__)
-
-# Slack メッセージの送信。
-utils.send_slack_message(message)
 """
 
 # Built-in modules.
+import hashlib
 import logging
-import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 # Third-party modules.
 import mysql.connector
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
-import pytz
 
 # User modules.
 import consts
 
 
-class DbClient:
-    """DB アクセスを行うクラスです。 with 構文で使用可能です。
-    with utils.DbClient() as db_client:
-        records = db_client.sample_select()
+class DbError(Exception):
+    """DB の状態が想定と違うときのエラーです。"""
+
+
+def get_connection_config(settings: consts.Settings) -> dict:
+    """mysql.connector.connect に渡す設定を作ります。
+
+    NOTE: TLS が有効なときは、証明書の検証を必ず有効にします。
+          ssl_verify_cert が False だと、 TLS 非対応のサーバには平文で接続してしまいます。
     """
 
+    config = {
+        'host': settings.mysql_host,
+        'port': settings.mysql_port,
+        'user': settings.mysql_user,
+        'password': settings.mysql_password,
+        'database': settings.mysql_database,
+        'connection_timeout': 10,
+    }
+    if settings.mysql_tls:
+        config.update(
+            ssl_disabled=False,
+            ssl_ca=settings.mysql_ssl_ca,
+            ssl_verify_cert=True,
+            ssl_verify_identity=settings.mysql_ssl_verify_identity,
+        )
+    else:
+        config.update(ssl_disabled=True)
+    return config
+
+
+def get_run_lock_name(settings: consts.Settings) -> str:
+    """売買の実行を 1 つに絞るための MySQL ロック (GET_LOCK) の名前です。
+    NOTE: GET_LOCK の名前はサーバ全体で共有され、 64 文字までなので、 DB 名とユーザをハッシュにします。
+    """
+
+    key = f'{settings.mysql_database}:{settings.user_id}'.encode()
+    return f'shuumulator:{hashlib.sha256(key).hexdigest()[:32]}'
+
+
+def to_utc_naive(value: datetime) -> datetime:
+    """DB に保存するため、 aware datetime を UTC のタイムゾーンなし datetime にします。"""
+
+    if value.tzinfo is None:
+        raise ValueError('タイムゾーン付きの datetime を渡してください。')
+    return value.astimezone(UTC).replace(tzinfo=None)
+
+
+class DbClient:
+    """DB アクセスを行うクラスです。 with 構文で使用可能です。
+    with utils.DbClient(settings) as db_client:
+        stocks = db_client.fetch_stocks()
+    """
+
+    def __init__(self, settings: consts.Settings):
+        self.settings = settings
+
     def __enter__(self):
-        mysql_connection_config = {
-            'host': consts.MYSQL_HOST,
-            'user': consts.MYSQL_USER,
-            'password': consts.MYSQL_PASSWORD,
-            'database': consts.MYSQL_DATABASE,
-        }
-        self.connection = mysql.connector.connect(**mysql_connection_config)
+        self.connection = mysql.connector.connect(**get_connection_config(self.settings))
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.connection.close()
+        try:
+            if exc_type is not None:
+                self.connection.rollback()
+        finally:
+            self.connection.close()
 
-    def sample_select(self) -> list:
-        """サンプルです。
-
-        Returns:
-            list: Select 結果のリスト。
-        """
-
-        select_sql = ' '.join([
-            'SELECT',
-                'id',  # noqa: E131
-            'FROM sampletable',
-            'WHERE',
-                'id = %s',
-            'ORDER BY id DESC',
-        ])
-        cursor = self.connection.cursor(dictionary=True)
-        cursor.execute(select_sql, (1,))
-        records = cursor.fetchall()
-        cursor.close()
-        return records
-
-    def sample_update(self):
-        """サンプルです。
-        """
-
-        update_sql = ' '.join([
-            'UPDATE sampletable',
-            'SET',
-                'foo = %s',  # noqa: E131
-            'WHERE id = %s',
-        ])
-        cursor = self.connection.cursor()
-        cursor.execute(update_sql, (1, 1))
-        cursor.close()
+    def commit(self) -> None:
         self.connection.commit()
 
-    def fetch_completed_tradings(self,
-                                 user: int,
-                                 with_stock: bool = False) -> list:
+    def acquire_run_lock(self) -> bool:
+        """売買の実行ロックを待たずに取ります。取れなければ False です。
+        NOTE: ロックはこの接続を閉じると外れます。
+        """
+
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute('SELECT GET_LOCK(%s, 0)', (get_run_lock_name(self.settings),))
+            (acquired,) = cursor.fetchone()
+        finally:
+            cursor.close()
+        return acquired == 1
+
+    def _fetch_all(self, sql: str, params: tuple = ()) -> list:
+        cursor = self.connection.cursor(dictionary=True)
+        try:
+            cursor.execute(sql, params)
+            return cursor.fetchall()
+        finally:
+            cursor.close()
+
+    def _execute(self, sql: str, params: tuple) -> tuple[int, int]:
+        """INSERT, UPDATE を実行して (lastrowid, rowcount) を返します。 commit はしません。"""
+
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(sql, params)
+            return cursor.lastrowid, cursor.rowcount
+        finally:
+            cursor.close()
+
+    def fetch_completed_tradings(self, user_id: int, with_stock: bool = False) -> list:
         """完了済みの trading レコードを取得します。
 
         Args:
-            user (int): trading.user
+            user_id (int): trading.user_id
             with_stock (bool, optional): Defaults to False.
-                                         LEFT JOIN stock が欲しい場合が出ていたので追加した optional 引数です。
+                                         True なら stock.code, stock.name も取得します。
 
         Returns:
             list: tradings
         """
 
+        columns = ['trading.id', 'trading.stock_id', 'trading.user_id', 'trading.buy',
+                   'trading.bought_at', 'trading.sell', 'trading.sold_at']
+        if with_stock:
+            columns += ['stock.code', 'stock.name']
         select_sql = ' '.join([
-            'SELECT *',
+            'SELECT', ', '.join(columns),
             'FROM trading',
-            'LEFT JOIN stock ON trading.stock_id=stock.id' if with_stock else '',
-            'WHERE user_id=%s AND sold_at IS NOT NULL',
+            'LEFT JOIN stock ON trading.stock_id = stock.id' if with_stock else '',
+            'WHERE trading.user_id = %s AND trading.sold_at IS NOT NULL',
+            'ORDER BY trading.sold_at, trading.id',
         ])
-        cursor = self.connection.cursor(dictionary=True)
-        cursor.execute(select_sql, (user,))
-        records = cursor.fetchall()
-        cursor.close()
-        return records
+        return self._fetch_all(select_sql, (user_id,))
 
-    def fetch_completed_tradings_with_stock(self, user: int) -> list:
-        """完了済みの trading レコードを LEFT JOIN stock で取得します。
-
-        Args:
-            user (int): trading.user
-
-        Returns:
-            list: tradings
-        """
-
-        return self.fetch_completed_tradings(user=user, with_stock=True)
-
-    def fetch_newest_trading(self, stock_id: int) -> dict:
-        """最新の trading レコードを取得します。
+    def fetch_newest_trading(self, stock_id: int, user_id: int) -> dict | None:
+        """このユーザの、この stock の最新 trading レコードを取得します。
         存在しなければ None を返します。
-
-        Args:
-            stock_id (int): stock.id
-
-        Returns:
-            dict: trading
         """
 
         select_sql = ' '.join([
-            'SELECT *',
+            'SELECT id, stock_id, user_id, buy, bought_at, sell, sold_at, created_at',
             'FROM trading',
-            'WHERE stock_id=%s',
-            'ORDER BY created_at DESC',
+            'WHERE stock_id = %s AND user_id = %s',
+            'ORDER BY created_at DESC, id DESC',
             'LIMIT 1',
         ])
-        cursor = self.connection.cursor(dictionary=True)
-        cursor.execute(select_sql, (stock_id,))
-        record = cursor.fetchone()
-        cursor.close()
-        return record
+        records = self._fetch_all(select_sql, (stock_id, user_id))
+        return records[0] if records else None
 
     def fetch_stocks(self) -> list:
         """stocks を取得します。
-
-        Returns:
-            list: stocks
+        NOTE: 接続先は設定の MYSQL_DATABASE です。 DB 名は SQL に書きません。
         """
 
-        select_sql = ' '.join([
-            'SELECT * FROM shuumulator.stock',
-        ])
-        cursor = self.connection.cursor(dictionary=True)
-        cursor.execute(select_sql)
-        records = cursor.fetchall()
-        cursor.close()
-        return records
+        return self._fetch_all('SELECT id, code, name FROM stock ORDER BY id')
 
-    def create_stock_log(self, stock_id: int, price: Decimal) -> int:
+    def create_stock_log(self, stock_id: int, price: Decimal, created_at: datetime) -> int:
         """stock_log を INSERT します。
-
-        Args:
-            stock_id ([type]): stock.id
-            price ([type]): stock_log.price
 
         Returns:
             int: created id
         """
 
-        insert_sql = ' '.join([
-            'INSERT INTO stock_log (stock_id, price, created_at)',
-            'VALUES (%s, %s, %s)',
-        ])
-        cursor = self.connection.cursor(dictionary=True)
-        cursor.execute(
-            insert_sql,
-            (stock_id, price, datetime.datetime.now(tz=pytz.utc))
-        )
-        last_row_id = cursor.lastrowid
-        cursor.close()
-        self.connection.commit()
+        insert_sql = 'INSERT INTO stock_log (stock_id, price, created_at) VALUES (%s, %s, %s)'
+        last_row_id, _ = self._execute(insert_sql, (stock_id, price, to_utc_naive(created_at)))
         return last_row_id
 
-    def create_trading(self, stock_id: int, user_id: int,
-                       price: Decimal) -> int:
-        """trading を一件追加します。
-
-        Args:
-            stock_id (int): trading.stock
-            user_id (int): trading.user
-            price (Decimal): trading.buy
+    def create_trading(self, stock_id: int, user_id: int, price: Decimal,
+                       bought_at: datetime) -> int:
+        """trading を一件追加します (買付)。
 
         Returns:
             int: created trading.id
         """
 
-        current_utc = datetime.datetime.now(tz=pytz.utc)
-
         insert_sql = ' '.join([
             'INSERT INTO trading',
             '(stock_id, user_id, buy, bought_at, created_at)',
-            'VALUES',
-            '(%s, %s, %s, %s, %s)',
+            'VALUES (%s, %s, %s, %s, %s)',
         ])
-        cursor = self.connection.cursor(dictionary=True)
-        cursor.execute(
-            insert_sql,
-            (stock_id, user_id, price, current_utc, current_utc)
-        )
-        last_row_id = cursor.lastrowid
-        cursor.close()
-        self.connection.commit()
+        bought_at = to_utc_naive(bought_at)
+        last_row_id, _ = self._execute(insert_sql, (stock_id, user_id, price, bought_at, bought_at))
         return last_row_id
 
-    def update_trading(self, trading_id: int,
-                       sell_price: Decimal) -> None:
-        """trading.sell と trading.sold_at を更新します。
+    def update_trading(self, trading_id: int, user_id: int, sell_price: Decimal,
+                       sold_at: datetime) -> None:
+        """trading.sell と trading.sold_at を更新します (売付)。
 
-        Args:
-            trading_id (int): trading.id
-            sell_price (Decimal): trading.sell
+        Raises:
+            DbError: このユーザの未売却の trading が見つからない。
         """
 
         update_sql = ' '.join([
             'UPDATE trading',
-            'SET sell=%s, sold_at=%s',
-            'WHERE id=%s',
+            'SET sell = %s, sold_at = %s',
+            'WHERE id = %s AND user_id = %s AND sold_at IS NULL',
         ])
-        cursor = self.connection.cursor(dictionary=True)
-        cursor.execute(
-            update_sql,
-            (sell_price, datetime.datetime.now(tz=pytz.utc), trading_id)
-        )
-        cursor.close()
-        self.connection.commit()
-
-
-def get_placeholder(count: int) -> str:
-    """count ぶんのプレースホルダ文字列を作ります。
-    %s, %s, %s, %s, ...
-
-    Args:
-        count (int): 欲しい %s の数。
-
-    Returns:
-        str: %s, %s, %s, %s, ...
-    """
-
-    return ','.join(('%s' for i in range(count)))
+        _, row_count = self._execute(
+            update_sql, (sell_price, to_utc_naive(sold_at), trading_id, user_id))
+        if row_count != 1:
+            raise DbError(f'売付できる trading が見つかりません。 trading.id: {trading_id}')
 
 
 def get_my_logger(logger_name: str) -> logging.Logger:
@@ -270,68 +233,18 @@ def get_my_logger(logger_name: str) -> logging.Logger:
         logging.Logger: モジュール用のロガー。
     """
 
-    """
-    メインの処理とは別に関係ない。
-
-    Returns:
-        Logger -- モジュール用のロガー。
-    """
-
-    # ルートロガーを作成します。ロガーはモジュールごとに分けるもの。
     logger = logging.getLogger(logger_name)
-    # ルートロガーのログレベルは DEBUG。
+    # NOTE: 同じ名前で何度呼ばれてもハンドラを重ねて付けないようにします。
+    if logger.handlers:
+        return logger
     logger.setLevel(logging.DEBUG)
     # コンソールへ出力するハンドラを作成。
     handler = logging.StreamHandler()
-    # ハンドラもログレベルを持ちます。
     handler.setLevel(logging.DEBUG)
-    # ログフォーマットをハンドラに設定します。
     formatter = logging.Formatter(
-        # NOTE: 改行は逆に見づらいので E501 を無視します。
-        '%(asctime)s - %(levelname)s - %(filename)s - %(name)s - %(funcName)s - %(message)s')  # noqa: E501
+        '%(asctime)s - %(levelname)s - %(filename)s - %(name)s - %(funcName)s - %(message)s')
     handler.setFormatter(formatter)
-    # ハンドラをロガーへセットします。
     logger.addHandler(handler)
-    # 親ロガーへの(伝播をオフにします。
+    # 親ロガーへの伝播をオフにします。
     logger.propagate = False
     return logger
-
-
-def send_slack_message(message: str) -> None:
-    """slack_sdk を用いたメッセージ送信を行います。
-    Document: https://github.com/slackapi/python-slack-sdk/blob/main/tutorial/01-creating-the-slack-app.md  # noqa: E501
-
-    Args:
-        message (str): 送信したいメッセージ。
-    """
-
-    slack_client = WebClient(token=consts.SLACK_BOT_TOKEN)
-
-    try:
-        # NOTE: unfurl_links は時折鬱陶しいと思っている「リンクの展開機能」です。不要です。 False.
-        response = slack_client.chat_postMessage(
-            channel=consts.SLACK_MESSAGE_CHANNEL,
-            text=message,
-            unfurl_links=False)
-        # NOTE: Slack api のドキュメントにあるコードですが、正常に終了しても false になる場合があるので注意。
-        #       リンクの含まれるメッセージを送信すると、返却値が勝手に変更されるため一致しません。
-        #       - リンクの前後に <, > がつく
-        #       - & -> &amp; エスケープが起こる
-        assert response['message']['text'] == message
-    except SlackApiError as e:
-        assert e.response['ok'] is False
-        # str like 'invalid_auth', 'channel_not_found'
-        assert e.response['error']
-        logger.error(f'Got an error: {e.response["error"]}')
-
-
-# utils モジュール用のロガーを作成します。
-logger = get_my_logger(__name__)
-
-if __name__ == '__main__':
-    logger.debug('でばーぐ')
-    logger.info('いんーふぉ')
-    logger.warning('うぉーにん')
-    logger.error('えろあ')
-    logger.fatal('ふぇーたる(critical と同じっぽい)')
-    logger.critical('くりてぃこぉ')

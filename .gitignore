@@ -88,3 +88,8 @@ local_settings.py
 .env
 db.sqlite3
 .vscode/
+
+### Shuumulator ###
+.venv/
+.pytest_cache/
+.ruff_cache/

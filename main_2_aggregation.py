@@ -1,113 +1,120 @@
 """Shuumulator aggregation module
 
-Shuumulator main module が行った売買の集計を行いログ上で可視化するモジュールです。
+Shuumulator main module が行った売買の集計を行い、標準出力に表示するモジュールです。
+NOTE: DB は読むだけです。それでも本番 DB に接続するので、 --execute を付けたときだけ動きます。
 
-code,name,buy,bought_at,sell,sold_at,difference,difference_percentage
+"code","name","buy","bought_at","sell","sold_at","difference","difference_percentage"
 ...(CSV)...
-
-Total trades: ****
-Wins: ****
-Loses: ****
-Win rate: ****
-Total earning: ****
-Average plus: ****
-Average minus: ****
-Total gain: ****
-Total lose: ****
+total_trades_len: ****
+wins_len: ****
+loses_len: ****
+draws_len: ****
+win_rate: ****
+total_earning: ****
+total_gain: ****
+total_lost: ****
 """
 
 # Built-in modules.
-import datetime
-import pytz
+import csv
+import sys
+from decimal import ROUND_HALF_UP, Decimal
+from typing import TextIO
+
+# Third-party modules.
+import mysql.connector
 
 # User modules.
+import consts
+import functions
+import main as shuumulator_main
 import utils
-
 
 # ロガーを取得します。
 logger = utils.get_my_logger(__name__)
-current_utc = datetime.datetime.now(tz=pytz.utc)
-logger.info(f'Shuumulator started at {current_utc.isoformat()}')
-current_jst = datetime.datetime.now(tz=pytz.timezone('Asia/Tokyo'))
-logger.info(f'Shuumulator started at {current_jst.isoformat()}')
-logger.info('以下に、売付の済んだ取引一覧を表示します。')
 
-# 売買履歴(trading)をすべて取得します。
-with utils.DbClient() as db_client:
-    tradings = db_client.fetch_completed_tradings_with_stock(user=1)
-if not tradings:
-    logger.info('表示する取引はありません。')
-    quit()
+CSV_COLUMNS = ['code', 'name', 'buy', 'bought_at', 'sell', 'sold_at',
+               'difference', 'difference_percentage']
 
-# 各 dict にロギング用の項目を足します。
-# NOTE: code,name,buy,bought_at,sell,sold_at,difference,difference_percentage
-logs = []
-for i in range(len(tradings)):
-    _ = tradings.pop()
-    # _ の例は次の通り。
-    # {'id': 1, 'stock': 1, 'user': 1,
-    # 'buy': Decimal('1443.00'),
-    # 'bought_at': datetime.datetime(2021, 3, 2, 13, 32, 39),
-    # 'sell': Decimal('1500.00'),
-    # 'sold_at': datetime.datetime(2021, 3, 2, 13, 32, 39),
-    # 'created_at': datetime.datetime(2021, 3, 2, 13, 32, 39),
-    # 'code': '9434', 'name': 'ソフトバンク'}
-    logs.append(dict(
-        code=_['code'],
-        name=_['name'],
-        buy=float(_['buy']),
-        bought_at=_['bought_at'].strftime('%Y-%m-%dT%H:%M:%SZ'),
-        sell=float(_['sell']),
-        sold_at=_['sold_at'].strftime('%Y-%m-%dT%H:%M:%SZ'),
-        difference=float(_['sell'] - _['buy']),
-        difference_percentage=float((_['sell'] - _['buy']) / _['buy'] * 100),
-    ))
 
-# 勝ち一覧。
-logs_win = list(filter(lambda x: x['difference'] >= 0, logs))
-# 負け一覧。
-logs_lose = list(filter(lambda x: x['difference'] < 0, logs))
-# difference 一覧。
-differences = list(map(lambda x: x['difference'], logs))
-# difference_percentage 一覧。
-difference_percentages = list(map(lambda x: x['difference_percentage'], logs))
+def summarize(tradings: list) -> dict:
+    """売付の済んだ取引を集計します。金額はすべて Decimal で計算します。
 
-# 集計項目を算出します。
-total_trades_len = len(logs)
-wins_len = len(logs_win)
-loses_len = total_trades_len - wins_len
-win_rate = wins_len / total_trades_len
-total_earning = sum(differences)
-total_gain = sum(list(filter(lambda x: x >= 0, differences)))
-total_lost = total_earning - total_gain
+    NOTE: 勝ち負けの定義は functions.is_win と同じです。同値は引き分けで、勝率の分母には入ります。
+    """
 
-# 出力します。
-print(','.join([
-    '"code"',
-    '"name"',
-    '"buy"',
-    '"bought_at"',
-    '"sell"',
-    '"sold_at"',
-    '"difference"',
-    '"difference_percentage"',
-]))
-for _ in logs:
+    differences = [t['sell'] - t['buy'] for t in tradings]
+    wins_len = sum(1 for t in tradings if functions.is_win(t))
+    loses_len = sum(1 for d in differences if d < 0)
+    total_gain = sum((d for d in differences if d > 0), Decimal('0'))
+    total_lost = sum((d for d in differences if d < 0), Decimal('0'))
+    return dict(
+        total_trades_len=len(tradings),
+        wins_len=wins_len,
+        loses_len=loses_len,
+        draws_len=len(tradings) - wins_len - loses_len,
+        win_rate=functions.calculate_wins_rate(tradings),
+        total_earning=total_gain + total_lost,
+        total_gain=total_gain,
+        total_lost=total_lost,
+    )
+
+
+def to_row(trading: dict) -> list:
+    """CSV の 1 行を作ります。日時は UTC で保存されています。"""
+
+    difference = trading['sell'] - trading['buy']
+    difference_percentage = (difference / trading['buy'] * 100).quantize(
+        Decimal('0.01'), rounding=ROUND_HALF_UP)
+    return [
+        trading['code'],
+        trading['name'],
+        trading['buy'],
+        trading['bought_at'].strftime('%Y-%m-%dT%H:%M:%SZ'),
+        trading['sell'],
+        trading['sold_at'].strftime('%Y-%m-%dT%H:%M:%SZ'),
+        difference,
+        difference_percentage,
+    ]
+
+
+def write_report(tradings: list, out: TextIO) -> None:
+    """取引一覧の CSV と集計結果を書き出します。"""
+
     # NOTE: excel にコピペすることを考えてダブルクォーテーションで囲います。
-    print(','.join([
-        '"' + str(_['code']) + '"',
-        '"' + str(_['name']) + '"',
-        '"' + str(_['buy']) + '"',
-        '"' + str(_['bought_at']) + '"',
-        '"' + str(_['sell']) + '"',
-        '"' + str(_['sold_at']) + '"',
-        '"' + str(_['difference']) + '"',
-        '"' + str(_['difference_percentage']) + '"',
-    ]))
-print(f'total_trades_len: {total_trades_len}')
-print(f'wins_len: {wins_len}')
-print(f'loses_len: {loses_len}')
-print(f'win_rate: {win_rate}')
-print(f'total_earning: {total_earning}')
-print(f'total_gain: {total_gain}')
-print(f'total_lost: {total_lost}')
+    writer = csv.writer(out, quoting=csv.QUOTE_ALL, lineterminator='\n')
+    writer.writerow(CSV_COLUMNS)
+    writer.writerows(to_row(t) for t in tradings)
+    for key, value in summarize(tradings).items():
+        out.write(f'{key}: {value}\n')
+
+
+def run(settings: consts.Settings, out: TextIO) -> int:
+    """DB から売付の済んだ取引を読み、集計を書き出します。"""
+
+    logger.info('以下に、売付の済んだ取引一覧を表示します。')
+    try:
+        with utils.DbClient(settings) as db_client:
+            tradings = db_client.fetch_completed_tradings(settings.user_id, with_stock=True)
+    except mysql.connector.Error as e:
+        logger.error(f'DB の読み込みに失敗しました: {e}')
+        return 1
+    if not tradings:
+        logger.info('表示する取引はありません。')
+        return 0
+    write_report(tradings, out)
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = shuumulator_main.parse_args('売付の済んだ取引を集計して表示します。', argv)
+    if not args.execute:
+        return shuumulator_main.refuse_without_execute()
+    settings = shuumulator_main.load_settings_for_execution()
+    if settings is None:
+        return 2
+    return run(settings, sys.stdout)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

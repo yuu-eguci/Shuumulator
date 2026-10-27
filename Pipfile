@@ -6,13 +6,15 @@ name = "pypi"
 [packages]
 python-dotenv = "*"
 mysql-connector-python = "*"
-slack-sdk = "*"
-pytz = "*"
+tzdata = "*"
 requests = "*"
 beautifulsoup4 = "*"
 lxml = "*"
 
 [dev-packages]
+pytest = "*"
+ruff = "*"
+pip-audit = "*"
 
 [requires]
-python_version = "3.8"
+python_version = "3.14"
