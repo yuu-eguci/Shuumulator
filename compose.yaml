@@ -1,0 +1,97 @@
+# lint、テスト、依存監査を Docker で再現するための compose です。
+# NOTE: ここで使う MySQL と証明書はすべて使い捨てです。パスワードもテスト専用のダミーです。
+#       本番 DB の接続情報をここに書かないでください。
+
+x-mysql: &mysql
+  image: mysql:8.4.13@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69
+  environment:
+    MYSQL_ROOT_PASSWORD: local-test-root
+    MYSQL_DATABASE: shuumulator_test
+    MYSQL_USER: shuumulator_test
+    MYSQL_PASSWORD: local-test-only
+  tmpfs:
+    - /var/lib/mysql
+  networks:
+    - test
+  healthcheck:
+    # NOTE: TLS 無効のサーバでもパスワード認証できるよう、公開鍵交換を使います。
+    test: ["CMD-SHELL", "mysqladmin ping --get-server-public-key -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+    interval: 2s
+    timeout: 5s
+    retries: 60
+
+services:
+  # テスト用の CA とサーバ証明書を作ります。
+  certs:
+    image: python:3.14.10-slim@sha256:82abc9f53600280b0757126f83c5a7d47088592d2acb6b4c0b9e97f76865508c
+    command: ["sh", "/scripts/make-test-certs.sh", "/certs"]
+    network_mode: none
+    volumes:
+      - ./docker/make-test-certs.sh:/scripts/make-test-certs.sh:ro
+      - test-certs:/certs
+
+  # TLS 有効の MySQL です。
+  mysql:
+    <<: *mysql
+    command:
+      - --ssl-ca=/certs/ca.pem
+      - --ssl-cert=/certs/server-cert.pem
+      - --ssl-key=/certs/server-key.pem
+    volumes:
+      - test-certs:/certs:ro
+    depends_on:
+      certs:
+        condition: service_completed_successfully
+
+  # TLS 無効の MySQL です。 TLS 必須の設定で接続できないことを確かめます。
+  mysql-notls:
+    <<: *mysql
+    command:
+      - --tls-version=
+
+  test:
+    build:
+      context: .
+      target: dev
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      MYSQL_TEST_HOST: mysql
+      MYSQL_TEST_NOTLS_HOST: mysql-notls
+      MYSQL_TEST_PORT: "3306"
+      MYSQL_TEST_USER: shuumulator_test
+      MYSQL_TEST_PASSWORD: local-test-only
+      MYSQL_TEST_DATABASE: shuumulator_test
+      MYSQL_TEST_SSL_CA: /certs/ca.pem
+      MYSQL_TEST_OTHER_CA: /certs/other-ca.pem
+    volumes:
+      - .:/app:ro
+      - test-certs:/certs:ro
+    # NOTE: internal ネットワークなのでインターネットには出られません。
+    networks:
+      - test
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mysql-notls:
+        condition: service_healthy
+
+  # 依存の脆弱性チェックです。 PyPI の脆弱性 DB に問い合わせるので、これだけは外に出ます。
+  audit:
+    build:
+      context: .
+      target: dev
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      HOME: /tmp
+    command: ["pip-audit", "--strict", "--progress-spinner", "off"]
+
+networks:
+  test:
+    internal: true
+
+volumes:
+  test-certs:

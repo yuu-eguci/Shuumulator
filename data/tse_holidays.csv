@@ -1,0 +1,46 @@
+# 東京証券取引所の休業日 (土日以外) です。
+# Source: https://www.jpx.co.jp/english/corporate/about-jpx/calendar/index.html (retrieved 2026-10-27)
+# NOTE: ここに載っている年だけを「判定可能な年」として扱います。載っていない年は市場が開いているか判定しません。
+# NOTE: 祝日の変更や臨時休場 (システム障害など) は反映されません。年ごとに JPX の公表を見て追記してください。
+date,name
+2026-01-01,New Year's Day
+2026-01-02,Market Holiday
+2026-01-03,Market Holiday
+2026-01-12,Coming of Age Day
+2026-02-11,National Foundation Day
+2026-02-23,Emperor's Birthday
+2026-03-20,Vernal Equinox
+2026-04-29,Showa Day
+2026-05-03,Constitution Memorial Day
+2026-05-04,Greenery Day
+2026-05-05,Children's Day
+2026-05-06,Constitution Memorial Day (May 3) observed
+2026-07-20,Marine Day
+2026-08-11,Mountain Day
+2026-09-21,Respect for the Aged Day
+2026-09-22,Holiday
+2026-09-23,Autumnal Equinox
+2026-10-12,Sports Day
+2026-11-03,Culture Day
+2026-11-23,Labor Thanksgiving Day
+2026-12-31,Market Holiday
+2027-01-01,New Year's Day
+2027-01-02,Market Holiday
+2027-01-03,Market Holiday
+2027-01-11,Coming of Age Day
+2027-02-11,National Foundation Day
+2027-02-23,Emperor's Birthday
+2027-03-21,Vernal Equinox
+2027-03-22,Vernal Equinox (Mar. 21) observed
+2027-04-29,Showa Day
+2027-05-03,Constitution Memorial Day
+2027-05-04,Greenery Day
+2027-05-05,Children's Day
+2027-07-19,Marine Day
+2027-08-11,Mountain Day
+2027-09-20,Respect for the Aged Day
+2027-09-23,Autumnal Equinox
+2027-10-11,Sports Day
+2027-11-03,Culture Day
+2027-11-23,Labor Thanksgiving Day
+2027-12-31,Market Holiday
